@@ -98,6 +98,8 @@ profile profiles[] = {
     {red, {0, 0, 0, 0}, NULL, NULL},
     {green, {0, 0, 0, 0}, NULL, NULL},
     {blue, {0, 0, 0, 0}, NULL, NULL},
+    {yellow, {0, 0, 0, 0}, NULL, NULL},
+    {white, {0, 0, 0, 0}, NULL, NULL},
     {rainbowHorizontal, {0, 0, 0, 0}, NULL, NULL},
     {rainbowVertical, {0, 0, 0, 0}, NULL, NULL},
     {animatedRainbowVertical, {3000, 2000, 1200, 600}, NULL, NULL},
@@ -113,7 +115,8 @@ profile profiles[] = {
     {reactivePulse,
      {400, 1600, 1200, 800},
      reactivePulseKeypress,
-     reactivePulseInit}};
+     reactivePulseInit}
+};
 
 static uint8_t currentProfile = 0;
 static const uint8_t amountOfProfiles = sizeof(profiles) / sizeof(profile);
@@ -459,7 +462,8 @@ uint8_t rowPWMCount = 0;
 void mainCallback(GPTDriver *_driver) {
   (void)_driver;
 
-  if (ledEnabled) {
+  if (!ledEnabled)
+      return;
 
     palClearLine(ledColumns[currentCol]);
     for (int i = 0; i < NUM_ROW * 4; i++) {
