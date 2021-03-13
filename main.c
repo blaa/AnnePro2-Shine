@@ -47,10 +47,15 @@ ioline_t ledColumns[NUM_COLUMN] = {
     LINE_LED_COL_13, LINE_LED_COL_14};
 
 ioline_t ledRows[NUM_ROW * 4] = {
+    /* 0 */
     LINE_LED_ROW_1_R, LINE_LED_ROW_1_G, LINE_LED_ROW_1_B, 0,
+    /* 4 */
     LINE_LED_ROW_2_R, LINE_LED_ROW_2_G, LINE_LED_ROW_2_B, 0,
+    /* 8 */
     LINE_LED_ROW_3_R, LINE_LED_ROW_3_G, LINE_LED_ROW_3_B, 0,
+    /* 12 */
     LINE_LED_ROW_4_R, LINE_LED_ROW_4_G, LINE_LED_ROW_4_B, 0,
+    /* 16 */
     LINE_LED_ROW_5_R, LINE_LED_ROW_5_G, LINE_LED_ROW_5_B, 0,
 };
 
@@ -124,7 +129,7 @@ static volatile uint8_t currentSpeed = 0;
 static volatile uint16_t animationSkipTicks = 0;
 static uint32_t animationLastCallTime = 0;
 
-static const GPTConfig bftm0Config = {.frequency = 30000,
+static const GPTConfig bftm0Config = {.frequency = 25000,
                                       .callback = mainCallback};
 
 static mutex_t mtx;
@@ -142,7 +147,14 @@ static uint32_t foregroundColor = 0;
 
 uint8_t ledMasks[KEY_COUNT];
 led_t ledColors[KEY_COUNT];
-static uint16_t currentCol = 0;
+// static uint16_t currentRow = 0;
+
+static uint16_t currentProcession = 0;
+const uint16_t rowProcession[] = {
+    0, 4, 8, 12, 16, /* Reds */
+    1, 5, 9, 13, 17, /* Greens */
+    2, 6,10, 14, 18, /* Blues */
+};
 
 static const SerialConfig usart1Config = {.speed = 115200};
 
@@ -460,6 +472,8 @@ static inline void sPWM(uint8_t cycle, uint8_t currentCount, ioline_t port) {
   if (cycle > currentCount) {
     /* Enable LED */
     palSetLine(port);
+  } else {
+    palClearLine(port);
   }
 }
 
@@ -475,6 +489,7 @@ void mainCallback(GPTDriver *_driver) {
     return;
 
   /* Disable previous column ?? */
+  #if 0
   palClearLine(ledColumns[currentCol]);
 
   /* Turn off whole row before enabling new column */
@@ -483,6 +498,7 @@ void mainCallback(GPTDriver *_driver) {
       continue;
     palClearLine(ledRows[i]); /* This certainly DISABLES diode */
   }
+  #endif
 
   /* This time handle profile callback and nothing else */
   if (needToCallbackProfile) {
@@ -502,8 +518,52 @@ void mainCallback(GPTDriver *_driver) {
       return; /* And nothing else this time */
     }
   }
+  rowPWMCount += 1;
+  //if (rowPWMCount % 4 == 0)
+  //  return; /* Twice as long? */
+
+  /* Disable previously lit row */
+  palClearLine(ledRows[rowProcession[currentProcession]]);
+
+  currentProcession += 1;
+  if (currentProcession == 15) {
+      currentProcession = 0;
+  }
+
+  const uint16_t row = rowProcession[currentProcession];
+
+  //currentRow = (currentRow + 1) % NUM_ROWS;
+
+  /* Experiment */
+  // palClearLine(ledColumns[0]);
+  /* Constantly lit top-left key */
+
+  /* TODO Control PWM-wise all of those */
+  for (size_t col = 0; col < NUM_COLUMN; col++) {
+      const size_t ledIndex = col + (NUM_COLUMN * (row / 4));
+
+      const led_t keyLED = ledColors[ledIndex];
+      uint16_t cl;
+      if (row % 4 == 0) {
+          cl = keyLED.red;
+      } else if (row % 4 == 1) {
+          cl = keyLED.green;
+      } else {
+          cl = keyLED.blue;
+      }
+      cl += ledIntensity * 20;
+      sPWM(cl, rowPWMCount, ledColumns[col]);
+  }
+
+  /* Set current LED row */
+  palSetLine(ledRows[row]);
+
+  // if (rowPWMCount == 128)
+  // rowPWMCount = 0;
 
   /* Update LED display */
+  #if 0
+  /*
   currentCol = (currentCol + 1) % NUM_COLUMN;
 
   rowPWMCount += 63;
@@ -540,9 +600,12 @@ void mainCallback(GPTDriver *_driver) {
 
     sPWM(cl, (rowPWMCount + delta), ledRows[row]);
   }
-
+  */
   /* Enable the line?? */
-  palSetLine(ledColumns[currentCol]);
+  // palSetLine(ledColumns[currentCol]);
+
+  #endif
+
 }
 
 /*
