@@ -6,6 +6,8 @@
 void red(led_t *currentKeyLedColors, uint8_t intensity);
 void green(led_t *currentKeyLedColors, uint8_t intensity);
 void blue(led_t *currentKeyLedColors, uint8_t intensity);
+void yellow(led_t *currentKeyLedColors, uint8_t intensity);
+void white(led_t *currentKeyLedColors, uint8_t intensity);
 void rainbowHorizontal(led_t *currentKeyLedColors, uint8_t intensity);
 void rainbowVertical(led_t *currentKeyLedColors, uint8_t intensity);
 void miamiNights(led_t *currentKeyLedColors, uint8_t intensity);

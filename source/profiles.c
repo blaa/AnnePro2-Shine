@@ -22,6 +22,15 @@ void blue(led_t *currentKeyLedColors, uint8_t intensity) {
   setAllKeysColor(currentKeyLedColors, 0x0000FF, intensity);
 }
 
+void yellow(led_t *currentKeyLedColors, uint8_t intensity) {
+  setAllKeysColor(currentKeyLedColors, 0xFFFF00, intensity);
+}
+
+void white(led_t *currentKeyLedColors, uint8_t intensity) {
+  /* Compensate for gateron/kailh reds on board */
+  setAllKeysColor(currentKeyLedColors, 0xAAFFFF, intensity);
+}
+
 void miamiNights(led_t *currentKeyLedColors, uint8_t intensity) {
   setAllKeysColor(currentKeyLedColors, 0x00979c, intensity);
   setModKeysColor(currentKeyLedColors, 0x9c008f, intensity);

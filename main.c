@@ -118,20 +118,21 @@ profile profiles[] = {
      reactivePulseInit}
 };
 
-static uint8_t currentProfile = 0;
+static uint8_t currentProfile = 8;
 static const uint8_t amountOfProfiles = sizeof(profiles) / sizeof(profile);
 static volatile uint8_t currentSpeed = 0;
 static volatile uint16_t animationSkipTicks = 0;
 static uint32_t animationLastCallTime = 0;
 
-static const GPTConfig bftm0Config = {.frequency = 25000,
+static const GPTConfig bftm0Config = {.frequency = 30000,
                                       .callback = mainCallback};
 
 static mutex_t mtx;
 
 // each color from RGB is rightshifted by this amount
 // default zero corresponds to full intensity, max 3 correponds to 1/8 of color
-static uint8_t ledIntensity = 0;
+static uint8_t
+ledIntensity = 1;
 
 static volatile bool ledEnabled = false;
 
@@ -448,8 +449,16 @@ static inline void animationCallback() {
   profiles[currentProfile].callback(ledColors, ledIntensity);
 }
 
+/*
+ * Enables a row IO line according to the PWM cycle. PWM controls the brightness
+ * of all LEDs individually.
+ */
 static inline void sPWM(uint8_t cycle, uint8_t currentCount, ioline_t port) {
+  /* Cycle is a color intensity 0-255. the higher - the brighter
+   * currentCount is current PWM cycle position.
+   */
   if (cycle > currentCount) {
+    /* Enable LED */
     palSetLine(port);
   }
 }
@@ -463,65 +472,77 @@ void mainCallback(GPTDriver *_driver) {
   (void)_driver;
 
   if (!ledEnabled)
-      return;
+    return;
 
-    palClearLine(ledColumns[currentCol]);
-    for (int i = 0; i < NUM_ROW * 4; i++) {
-      if (i % 4 != 3) {
-        palClearLine(ledRows[i]);
-      }
-    }
+  /* Disable previous column ?? */
+  palClearLine(ledColumns[currentCol]);
 
-    if (needToCallbackProfile) {
-      needToCallbackProfile = false;
-      profiles[currentProfile].callback(ledColors, ledIntensity);
-    } else {
-      bool animationCalled = false;
-      if (animationSkipTicks > 0) {
-        // animation update logic
-        uint32_t curTime = chVTGetSystemTimeX();
-        // curTime wraps around when overflows, hence the check for "less"
-        if (curTime < animationLastCallTime ||
-            curTime - animationLastCallTime >= animationSkipTicks) {
-          animationCalled = true;
-          animationCallback();
-          animationLastCallTime = curTime;
-        }
-      }
-      if (!animationCalled) {
-        currentCol = (currentCol + 1) % NUM_COLUMN;
+  /* Turn off whole row before enabling new column */
+  for (int i = 0; i < NUM_ROW * 4; i++) {
+    if (i % 4 == 3)
+      continue;
+    palClearLine(ledRows[i]); /* This certainly DISABLES diode */
+  }
 
-        rowPWMCount += 63;
-        if (rowPWMCount == 255) {
-          rowPWMCount += 63;
-        }
+  /* This time handle profile callback and nothing else */
+  if (needToCallbackProfile) {
+    needToCallbackProfile = false;
+    profiles[currentProfile].callback(ledColors, ledIntensity);
+    return;
+  }
 
-        for (size_t row = 0; row < NUM_ROW * 4 - 1; row++) {
-          if (row % 4 != 3) {
-            const size_t ledIndex = currentCol + (NUM_COLUMN * (row / 4));
-
-            const led_t keyLED = ledColors[ledIndex];
-            uint8_t cl;
-            uint8_t delta = 0;
-
-            if (row % 4 == 0) {
-              cl = keyLED.red;
-              delta = 0;
-            } else if (row % 4 == 1) {
-              cl = keyLED.green;
-              delta = 85;
-            } else {
-              cl = keyLED.blue;
-              delta = 170;
-            }
-            sPWM(cl, rowPWMCount + delta, ledRows[row]);
-          }
-
-          palSetLine(ledColumns[currentCol]);
-        }
-      }
+  if (animationSkipTicks > 0) {
+    // animation update logic
+    uint32_t curTime = chVTGetSystemTimeX();
+    // curTime wraps around when overflows, hence the check for "less"
+    if (curTime < animationLastCallTime ||
+      curTime - animationLastCallTime >= animationSkipTicks) {
+      animationCallback();
+      animationLastCallTime = curTime;
+      return; /* And nothing else this time */
     }
   }
+
+  /* Update LED display */
+  currentCol = (currentCol + 1) % NUM_COLUMN;
+
+  rowPWMCount += 63;
+  if (rowPWMCount == 255) {
+      rowPWMCount += 63;
+  }
+
+  for (size_t row = 0; row < NUM_ROW * 4 - 1; row++) {
+    if (row % 4 == 3)
+      continue;
+
+    const size_t ledIndex = currentCol + (NUM_COLUMN * (row / 4));
+
+    const led_t keyLED = ledColors[ledIndex];
+    uint8_t cl;
+    uint8_t delta = 0;
+
+    if (row % 4 == 0) {
+      cl = keyLED.red;
+      delta = 0;
+      //if (cl < 12)
+      //cl = 0;
+    } else if (row % 4 == 1) {
+      cl = keyLED.green;
+      delta = 85;
+      //if (cl < 17)
+      //cl = 0;
+    } else {
+      cl = keyLED.blue;
+      delta = 170;
+      //if (cl < 20)
+      //cl = 0;
+    }
+
+    sPWM(cl, (rowPWMCount + delta), ledRows[row]);
+  }
+
+  /* Enable the line?? */
+  palSetLine(ledColumns[currentCol]);
 }
 
 /*
