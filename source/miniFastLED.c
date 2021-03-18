@@ -7,7 +7,6 @@
 /*
     #define HSV specifics
 */
-#define APPLY_DIMMING(X, Y) ((X) >> (Y))
 #define HSV_SECTION_6 (0x20)
 #define HSV_SECTION_3 (0x40)
 
@@ -15,20 +14,19 @@
 uint8_t rgbArray[3];
 
 // Convert HSV to RGB and write results to rgbResults
-void hsv2rgb(uint8_t hue, uint8_t sat, uint8_t val, uint8_t *rgbResults,
-             uint8_t intensity) {
+void hsv2rgb(uint8_t hue, uint8_t sat, uint8_t val, uint8_t *rgbResults) {
 
   // Convert hue, saturation and brightness ( HSV/HSB ) to RGB
   // "Dimming" is used on saturation and brightness to make
   // the output more visually linear.
 
   // Apply dimming curves
-  uint8_t value = APPLY_DIMMING(val, intensity);
+  uint8_t value = val;
   uint8_t saturation = sat;
 
   // The brightness floor is minimum number that all of
   // R, G, and B will be set to.
-  uint8_t invsat = APPLY_DIMMING(255 - saturation, intensity);
+  uint8_t invsat = 255 - saturation;
   uint8_t brightness_floor = (value * invsat) / 256;
 
   // The color amplitude is the maximum amount of R, G, and B
@@ -102,11 +100,10 @@ void hsv2rgb(uint8_t hue, uint8_t sat, uint8_t val, uint8_t *rgbResults,
 }
 
 // Set all keys to HSV color
-void setAllKeysColorHSV(led_t *ledColors, uint8_t hue, uint8_t sat, uint8_t val,
-                        uint8_t intensity) {
+void setAllKeysColorHSV(led_t *ledColors, uint8_t hue, uint8_t sat, uint8_t val) {
 
   // Convert hsv to rgb
-  hsv2rgb(hue, sat, val, rgbArray, intensity);
+  hsv2rgb(hue, sat, val, rgbArray);
 
   // Set key colors
   for (uint16_t i = 0; i < NUM_COLUMN * NUM_ROW; ++i) {
@@ -118,10 +115,10 @@ void setAllKeysColorHSV(led_t *ledColors, uint8_t hue, uint8_t sat, uint8_t val,
 
 // Set all keys to HSV color
 void setColumnColorHSV(led_t *ledColors, uint8_t column, uint8_t hue,
-                       uint8_t sat, uint8_t val, uint8_t intensity) {
+                       uint8_t sat, uint8_t val) {
 
   // Convert hsv to rgb
-  hsv2rgb(hue, sat, val, rgbArray, intensity);
+  hsv2rgb(hue, sat, val, rgbArray);
 
   // Set column key color
   for (uint16_t i = 0; i < NUM_ROW; ++i) {
@@ -134,10 +131,10 @@ void setColumnColorHSV(led_t *ledColors, uint8_t column, uint8_t hue,
 
 // Set column to HSV color
 void setRowColorHSV(led_t *ledColors, uint8_t row, uint8_t hue, uint8_t sat,
-                    uint8_t val, uint8_t intensity) {
+                    uint8_t val) {
 
   // Convert hsv to rgb
-  hsv2rgb(hue, sat, val, rgbArray, intensity);
+  hsv2rgb(hue, sat, val, rgbArray);
 
   // Set column key color
   for (uint16_t i = 0; i < NUM_COLUMN; ++i) {

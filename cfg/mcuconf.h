@@ -59,6 +59,12 @@
 
 #define HT32_GPT_USE_BFTM1                  FALSE
 #define HT32_GPT_BFTM1_IRQ_PRIORITY         0
+
+/*
+ * PWM Config
+ */
+#define HT32_PWM_USE_MCTM0 TRUE
+#define HT32_PWM_USE_MCTM1 TRUE
 /*
  * USB driver settings
  */

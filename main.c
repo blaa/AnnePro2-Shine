@@ -69,13 +69,12 @@ ioline_t ledRows[NUM_ROW * 4] = {
  * Active profiles
  * Add profiles from source/profiles.h in the profile array
  */
-typedef void (*lighting_callback)(led_t *, uint8_t);
+typedef void (*lighting_callback)(led_t *);
 
 /*
  * keypress handler
  */
-typedef void (*keypress_handler)(led_t *colors, uint8_t row, uint8_t col,
-                                 uint8_t intensity);
+typedef void (*keypress_handler)(led_t *colors, uint8_t row, uint8_t col);
 
 typedef void (*profile_init)(led_t *colors);
 
@@ -132,12 +131,25 @@ static uint32_t animationLastCallTime = 0;
 static const GPTConfig bftm0Config = {.frequency = 25000,
                                       .callback = mainCallback};
 
+/* TODO: Use .dot notation */
+static PWMConfig pwmConfig = {
+    10000, /* 10kHz PWM clock frequency.     */
+    5000,  /* Initial PWM period */
+    NULL,  /* Period callback.               */
+    {
+        {PWM_OUTPUT_ACTIVE_HIGH, NULL}, /* CH1 mode and callback. */
+        {PWM_OUTPUT_DISABLED, NULL}, /* CH2 mode and callback.         */
+        {PWM_OUTPUT_DISABLED, NULL}, /* CH3 mode and callback.         */
+        {PWM_OUTPUT_DISABLED, NULL}, /* CH4 mode and callback.         */
+    },
+};
+
 static mutex_t mtx;
 
 // each color from RGB is rightshifted by this amount
 // default zero corresponds to full intensity, max 3 correponds to 1/8 of color
 static uint8_t
-ledIntensity = 1;
+ledIntensity = 0;
 
 static volatile bool ledEnabled = false;
 
@@ -269,6 +281,24 @@ void changeMask(uint8_t mask) {
 
 void nextIntensity() {
   ledIntensity = (ledIntensity + 1) % 4;
+
+  uint16_t prcnt;
+  switch (ledIntensity) {
+  case 0:
+      prcnt = 10000;
+      break;
+  case 1:
+      prcnt = 9500;
+      break;
+  case 2:
+      prcnt = 9000;
+      break;
+  case 3:
+      prcnt = 8500;
+      break;
+  }
+  pwmEnableChannel(&PWMD_MCTM0, 0, PWM_PERCENTAGE_TO_WIDTH(&PWMD_MCTM0, prcnt));
+  // pwmChangePeriod(&PWMD_MCTM0, period);
   executeProfile(false);
 }
 
@@ -289,7 +319,7 @@ inline void handleKeypress(msg_t msg) {
   uint8_t col = msg & 0b1111;
   keypress_handler handler = profiles[currentProfile].keypressCallback;
   if (handler != NULL && row < NUM_ROW && col < NUM_COLUMN) {
-    handler(ledColors, row, col, ledIntensity);
+    handler(ledColors, row, col);
   }
 }
 
@@ -306,7 +336,7 @@ void setForegroundColor() {
     foregroundColor = *(uint32_t *)&colorBytes;
     foregroundColorSet = true;
 
-    setAllKeysColor(ledColors, foregroundColor, ledIntensity);
+    setAllKeysColor(ledColors, foregroundColor);
   }
 }
 
@@ -383,7 +413,9 @@ static inline void disableLeds() {
     gptStop(&GPTD_BFTM0);
   }
 
-  palClearLine(LINE_LED_PWR);
+  // palSetLine(LINE_LED_PWR);
+  pwmStop(&PWMD_MCTM0);
+  palClearLine(LINE_LED_PWR); /* Does it work with AF enabled? */
 
   for (int i = 0; i < NUM_ROW * 4; i++) {
     if (i % 4 != 3) {
@@ -405,7 +437,11 @@ static inline void enableLeds(void) {
   ledEnabled = true;
 
   executeProfile(true);
-  palSetLine(LINE_LED_PWR);
+
+  //palSetLine(LINE_LED_PWR);
+
+  pwmStart(&PWMD_MCTM0, &pwmConfig);
+  pwmEnableChannel(&PWMD_MCTM0, 1, PWM_PERCENTAGE_TO_WIDTH(&PWMD_MCTM0, 10000));
 
   // start PWM handling interval
   gptStart(&GPTD_BFTM0, &bftm0Config);
@@ -424,8 +460,7 @@ void ledSet() {
   if (bytesRead >= 4) {
     if (commandBuffer[0] < NUM_ROW && commandBuffer[1] < NUM_COLUMN) {
       setKeyColor(&ledColors[commandBuffer[0] * NUM_COLUMN + commandBuffer[1]],
-                  ((uint16_t)commandBuffer[3] << 8 | commandBuffer[2]),
-                  ledIntensity);
+                  ((uint16_t)commandBuffer[3] << 8 | commandBuffer[2]));
     }
   }
 }
@@ -458,7 +493,7 @@ static inline void animationCallback() {
     return;
   }
 
-  profiles[currentProfile].callback(ledColors, ledIntensity);
+  profiles[currentProfile].callback(ledColors);
 }
 
 /*
@@ -488,22 +523,10 @@ void mainCallback(GPTDriver *_driver) {
   if (!ledEnabled)
     return;
 
-  /* Disable previous column ?? */
-  #if 0
-  palClearLine(ledColumns[currentCol]);
-
-  /* Turn off whole row before enabling new column */
-  for (int i = 0; i < NUM_ROW * 4; i++) {
-    if (i % 4 == 3)
-      continue;
-    palClearLine(ledRows[i]); /* This certainly DISABLES diode */
-  }
-  #endif
-
   /* This time handle profile callback and nothing else */
   if (needToCallbackProfile) {
     needToCallbackProfile = false;
-    profiles[currentProfile].callback(ledColors, ledIntensity);
+    profiles[currentProfile].callback(ledColors);
     return;
   }
 
@@ -518,9 +541,8 @@ void mainCallback(GPTDriver *_driver) {
       return; /* And nothing else this time */
     }
   }
+
   rowPWMCount += 1;
-  //if (rowPWMCount % 4 == 0)
-  //  return; /* Twice as long? */
 
   /* Disable previously lit row */
   palClearLine(ledRows[rowProcession[currentProcession]]);
@@ -551,7 +573,8 @@ void mainCallback(GPTDriver *_driver) {
       } else {
           cl = keyLED.blue;
       }
-      cl += ledIntensity * 20;
+      if (cl < 20)
+          cl = 0;
       sPWM(cl, rowPWMCount, ledColumns[col]);
   }
 
@@ -560,51 +583,6 @@ void mainCallback(GPTDriver *_driver) {
 
   // if (rowPWMCount == 128)
   // rowPWMCount = 0;
-
-  /* Update LED display */
-  #if 0
-  /*
-  currentCol = (currentCol + 1) % NUM_COLUMN;
-
-  rowPWMCount += 63;
-  if (rowPWMCount == 255) {
-      rowPWMCount += 63;
-  }
-
-  for (size_t row = 0; row < NUM_ROW * 4 - 1; row++) {
-    if (row % 4 == 3)
-      continue;
-
-    const size_t ledIndex = currentCol + (NUM_COLUMN * (row / 4));
-
-    const led_t keyLED = ledColors[ledIndex];
-    uint8_t cl;
-    uint8_t delta = 0;
-
-    if (row % 4 == 0) {
-      cl = keyLED.red;
-      delta = 0;
-      //if (cl < 12)
-      //cl = 0;
-    } else if (row % 4 == 1) {
-      cl = keyLED.green;
-      delta = 85;
-      //if (cl < 17)
-      //cl = 0;
-    } else {
-      cl = keyLED.blue;
-      delta = 170;
-      //if (cl < 20)
-      //cl = 0;
-    }
-
-    sPWM(cl, (rowPWMCount + delta), ledRows[row]);
-  }
-  */
-  /* Enable the line?? */
-  // palSetLine(ledColumns[currentCol]);
-
-  #endif
 
 }
 
@@ -622,7 +600,6 @@ int main(void) {
   halInit();
   chSysInit();
 
-  /* profiles[currentProfile].callback(ledColors, ledIntensity); */
   updateAnimationSpeed();
 
   // Setup masks to all be 0xFF at the start
