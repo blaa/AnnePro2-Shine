@@ -28,7 +28,8 @@ void yellow(led_t *currentKeyLedColors) {
 
 void white(led_t *currentKeyLedColors) {
   /* Compensate for gateron/kailh reds on board */
-  setAllKeysColor(currentKeyLedColors, 0xAAFFFF);
+  // setAllKeysColor(currentKeyLedColors, 0xAAFFFF);
+  setAllKeysColor(currentKeyLedColors, 0x0A0b0c);
 }
 
 void miamiNights(led_t *currentKeyLedColors) {
@@ -134,11 +135,11 @@ void reactiveFade(led_t *ledColors) {
   for (int i = 0; i < NUM_ROW * NUM_COLUMN; i++) {
     if (animatedPressedBuf[i] > 5) {
       animatedPressedBuf[i] -= 5;
-      hsv2rgb(100 - animatedPressedBuf[i], 255, 225, (uint8_t *)&ledColors[i]);
+      hsv2rgb(100 - animatedPressedBuf[i], 255, 225, &ledColors[i]);
     } else if (animatedPressedBuf[i] > 0) {
-      ledColors[i].blue = 0;
-      ledColors[i].red = 0;
-      ledColors[i].green = 0;
+      ledColors[i].p.blue = 0;
+      ledColors[i].p.red = 0;
+      ledColors[i].p.green = 0;
       animatedPressedBuf[i] = 0;
     }
   }
@@ -147,9 +148,9 @@ void reactiveFade(led_t *ledColors) {
 void reactiveFadeKeypress(led_t *ledColors, uint8_t row, uint8_t col) {
   int i = row * NUM_COLUMN + col;
   animatedPressedBuf[i] = 100;
-  ledColors[i].green = 0;
-  ledColors[i].red = 0xFF;
-  ledColors[i].blue = 0;
+  ledColors[i].p.green = 0;
+  ledColors[i].p.red = 0xFF;
+  ledColors[i].p.blue = 0;
 }
 
 void reactiveFadeInit(led_t *ledColors) {
@@ -173,17 +174,17 @@ void reactivePulse(led_t *ledColors) {
       pulseBuf[i] -= pulseSpeed;
     } else if (pulseBuf[i] > pulseSpeed) {
       for (int j = 0; j < NUM_COLUMN; j++) {
-        ledColors[i * NUM_COLUMN + j].blue = (175 + pulseBuf[i]);
-        ledColors[i * NUM_COLUMN + j].red = 0;
-        ledColors[i * NUM_COLUMN + j].green = 0;
+        ledColors[i * NUM_COLUMN + j].p.blue = (175 + pulseBuf[i]);
+        ledColors[i * NUM_COLUMN + j].p.red = 0;
+        ledColors[i * NUM_COLUMN + j].p.green = 0;
       }
       pulseBuf[i] -= pulseSpeed;
     } else if (pulseBuf[i] > 0) {
       pulseBuf[i] = 0;
       for (int j = 0; j < NUM_COLUMN; j++) {
-        ledColors[i * NUM_COLUMN + j].blue = 0;
-        ledColors[i * NUM_COLUMN + j].red = 0;
-        ledColors[i * NUM_COLUMN + j].green = 0;
+        ledColors[i * NUM_COLUMN + j].p.blue = 0;
+        ledColors[i * NUM_COLUMN + j].p.red = 0;
+        ledColors[i * NUM_COLUMN + j].p.green = 0;
       }
     }
   }

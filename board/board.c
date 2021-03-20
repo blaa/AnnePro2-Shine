@@ -99,7 +99,7 @@
 
 // Alternate Functions
 #define AF_BITS(PORT, N) (\
-    PAFIO(PORT, N, LINE_LED_PWR,        AFIO_TM) |\
+    PAFIO(PORT, N, LINE_LED_PWR,        AFIO_GPIO) |\
     PAFIO(PORT, N, LINE_LED_COL_1,      AFIO_GPIO) |\
     PAFIO(PORT, N, LINE_LED_COL_2,      AFIO_GPIO) |\
     PAFIO(PORT, N, LINE_LED_COL_3,      AFIO_GPIO) |\

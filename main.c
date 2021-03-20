@@ -48,18 +48,31 @@ ioline_t ledColumns[NUM_COLUMN] = {
 
 ioline_t ledRows[NUM_ROW * 4] = {
     /* 0 */
-    LINE_LED_ROW_1_R, LINE_LED_ROW_1_G, LINE_LED_ROW_1_B, 0,
+    LINE_LED_ROW_1_R,
+    LINE_LED_ROW_1_G,
+    LINE_LED_ROW_1_B,
+    0,
     /* 4 */
-    LINE_LED_ROW_2_R, LINE_LED_ROW_2_G, LINE_LED_ROW_2_B, 0,
+    LINE_LED_ROW_2_R,
+    LINE_LED_ROW_2_G,
+    LINE_LED_ROW_2_B,
+    0,
     /* 8 */
-    LINE_LED_ROW_3_R, LINE_LED_ROW_3_G, LINE_LED_ROW_3_B, 0,
+    LINE_LED_ROW_3_R,
+    LINE_LED_ROW_3_G,
+    LINE_LED_ROW_3_B,
+    0,
     /* 12 */
-    LINE_LED_ROW_4_R, LINE_LED_ROW_4_G, LINE_LED_ROW_4_B, 0,
+    LINE_LED_ROW_4_R,
+    LINE_LED_ROW_4_G,
+    LINE_LED_ROW_4_B,
+    0,
     /* 16 */
-    LINE_LED_ROW_5_R, LINE_LED_ROW_5_G, LINE_LED_ROW_5_B, 0,
+    LINE_LED_ROW_5_R,
+    LINE_LED_ROW_5_G,
+    LINE_LED_ROW_5_B,
+    0,
 };
-
-#define REFRESH_FREQUENCY 200
 
 #define KEY_COUNT 70
 
@@ -119,37 +132,49 @@ profile profiles[] = {
     {reactivePulse,
      {400, 1600, 1200, 800},
      reactivePulseKeypress,
-     reactivePulseInit}
-};
+     reactivePulseInit}};
 
-static uint8_t currentProfile = 8;
+static uint8_t currentProfile = 4;
+// static uint8_t currentProfile = 8;
 static const uint8_t amountOfProfiles = sizeof(profiles) / sizeof(profile);
 static volatile uint8_t currentSpeed = 0;
 static volatile uint16_t animationSkipTicks = 0;
 static uint32_t animationLastCallTime = 0;
 
-static const GPTConfig bftm0Config = {.frequency = 25000,
+/* 25000 - "252" calls per 100 units of system time.
+   30000 - 303 calls per 100 units.
+   40000 - 403... it still works.
+   50000 - 460 - oops. Not linear.
+
+   systick according to docs is 10kHz so it fits.
+
+   This revisits each key 1/5 of a time - 8kHz.
+
+   1/40kHz * 1000ms = 0.025ms
+ */
+static const GPTConfig bftm0Config = {.frequency = 40000,
                                       .callback = mainCallback};
 
 /* TODO: Use .dot notation */
+/*
 static PWMConfig pwmConfig = {
-    10000, /* 10kHz PWM clock frequency.     */
-    5000,  /* Initial PWM period */
-    NULL,  /* Period callback.               */
+    1000000, // XkHz PWM clock frequency.
+    1000000, // Initial PWM period
+    NULL,    // Period callback.
     {
-        {PWM_OUTPUT_ACTIVE_HIGH, NULL}, /* CH1 mode and callback. */
-        {PWM_OUTPUT_DISABLED, NULL}, /* CH2 mode and callback.         */
-        {PWM_OUTPUT_DISABLED, NULL}, /* CH3 mode and callback.         */
-        {PWM_OUTPUT_DISABLED, NULL}, /* CH4 mode and callback.         */
+        {PWM_OUTPUT_DISABLED, NULL}, // CH1 mode and callback.
+        {PWM_OUTPUT_DISABLED, NULL}, // CH2 mode and callback.
+        {PWM_OUTPUT_DISABLED, NULL}, // CH3 mode and callback.
+        {PWM_OUTPUT_DISABLED, NULL}, // CH4 mode and callback.
     },
 };
+*/
 
 static mutex_t mtx;
 
 // each color from RGB is rightshifted by this amount
 // default zero corresponds to full intensity, max 3 correponds to 1/8 of color
-static uint8_t
-ledIntensity = 0;
+static uint8_t ledIntensity = 0;
 
 static volatile bool ledEnabled = false;
 
@@ -163,10 +188,19 @@ led_t ledColors[KEY_COUNT];
 
 static uint16_t currentProcession = 0;
 const uint16_t rowProcession[] = {
-    0, 4, 8, 12, 16, /* Reds */
-    1, 5, 9, 13, 17, /* Greens */
-    2, 6,10, 14, 18, /* Blues */
+ 0, 4, 8, 12, 16, /* Reds */
+ 1, 5, 9, 13, 17, /* Greens */
+ 2, 6,10, 14, 18, /* Blues */
 };
+
+/*
+const ioline_t rowProcession[15] = {
+    LINE_LED_ROW_1_R, LINE_LED_ROW_2_R, LINE_LED_ROW_3_R, LINE_LED_ROW_4_R,
+    LINE_LED_ROW_5_R, LINE_LED_ROW_1_G, LINE_LED_ROW_2_G, LINE_LED_ROW_3_G,
+    LINE_LED_ROW_4_G, LINE_LED_ROW_5_G, LINE_LED_ROW_1_B, LINE_LED_ROW_2_B,
+    LINE_LED_ROW_3_B, LINE_LED_ROW_4_B, LINE_LED_ROW_5_B,
+};
+*/
 
 static const SerialConfig usart1Config = {.speed = 115200};
 
@@ -282,23 +316,9 @@ void changeMask(uint8_t mask) {
 void nextIntensity() {
   ledIntensity = (ledIntensity + 1) % 4;
 
-  uint16_t prcnt;
-  switch (ledIntensity) {
-  case 0:
-      prcnt = 10000;
-      break;
-  case 1:
-      prcnt = 9500;
-      break;
-  case 2:
-      prcnt = 9000;
-      break;
-  case 3:
-      prcnt = 8500;
-      break;
-  }
-  pwmEnableChannel(&PWMD_MCTM0, 0, PWM_PERCENTAGE_TO_WIDTH(&PWMD_MCTM0, prcnt));
-  // pwmChangePeriod(&PWMD_MCTM0, period);
+  // pwmEnableChannel(&PWMD_MCTM0, 0, PWM_PERCENTAGE_TO_WIDTH(&PWMD_MCTM0,
+  // prcnt)); pwmChangePeriod(&PWMD_MCTM0, PWM_PERCENTAGE_TO_WIDTH(&PWMD_MCTM0,
+  // prcnt));
   executeProfile(false);
 }
 
@@ -414,7 +434,7 @@ static inline void disableLeds() {
   }
 
   // palSetLine(LINE_LED_PWR);
-  pwmStop(&PWMD_MCTM0);
+  // pwmStop(&PWMD_MCTM0);
   palClearLine(LINE_LED_PWR); /* Does it work with AF enabled? */
 
   for (int i = 0; i < NUM_ROW * 4; i++) {
@@ -438,10 +458,11 @@ static inline void enableLeds(void) {
 
   executeProfile(true);
 
-  //palSetLine(LINE_LED_PWR);
+  palSetLine(LINE_LED_PWR);
 
-  pwmStart(&PWMD_MCTM0, &pwmConfig);
-  pwmEnableChannel(&PWMD_MCTM0, 1, PWM_PERCENTAGE_TO_WIDTH(&PWMD_MCTM0, 10000));
+  // pwmStart(&PWMD_MCTM0, &pwmConfig);
+  // pwmEnableChannel(&PWMD_MCTM0, 1, PWM_PERCENTAGE_TO_WIDTH(&PWMD_MCTM0,
+  // 10000));
 
   // start PWM handling interval
   gptStart(&GPTD_BFTM0, &bftm0Config);
@@ -517,11 +538,54 @@ uint8_t rowPWMCount = 0;
 // mainCallback is responsible for 2 things:
 // * software PWM
 // * calling animation callback for animated profiles
+
 void mainCallback(GPTDriver *_driver) {
   (void)_driver;
 
   if (!ledEnabled)
     return;
+
+  /* Prepare PWM data */
+  rowPWMCount = (rowPWMCount + 1) % 128;
+
+
+  const uint8_t prevRow = rowProcession[currentProcession];
+  currentProcession += 1;
+  if (currentProcession == 15) { /* % generated more expensive code */
+    currentProcession = 0;
+  }
+  const uint8_t currentRow = rowProcession[currentProcession];
+  const uint8_t ledIndexBase = NUM_COLUMN * (currentRow / 4);
+  const uint8_t currentColor= 1 + (currentRow % 4); /* FIXME */
+
+  uint8_t vals[NUM_COLUMN];
+  for (size_t col = 0; col < NUM_COLUMN; col++) {
+    const led_t keyLED = ledColors[ledIndexBase + col];
+    uint8_t cl;
+    cl = keyLED.pv[currentColor];
+    /*
+    if (currentRow % 4 == 0) {
+      cl = keyLED.red;
+    } else if (currentRow % 4 == 1) {
+      cl = keyLED.green;
+    } else {
+      cl = keyLED.blue;
+    }
+    */
+    cl >>= ledIntensity; /* Dim */
+    vals[col] = cl >> 1; /* Decrease color resolution */
+  }
+
+  /* With prepared data, disable the previously lit row, configure the new one
+   and lit it on immediately. */
+  palClearLine(ledRows[prevRow]);
+
+  for (size_t col = 0; col < NUM_COLUMN; col++) {
+    sPWM(vals[col], rowPWMCount, ledColumns[col]);
+  }
+
+  /* Set current LED row */
+  palSetLine(ledRows[currentRow]);
 
   /* This time handle profile callback and nothing else */
   if (needToCallbackProfile) {
@@ -535,55 +599,12 @@ void mainCallback(GPTDriver *_driver) {
     uint32_t curTime = chVTGetSystemTimeX();
     // curTime wraps around when overflows, hence the check for "less"
     if (curTime < animationLastCallTime ||
-      curTime - animationLastCallTime >= animationSkipTicks) {
+        curTime - animationLastCallTime >= animationSkipTicks) {
       animationCallback();
       animationLastCallTime = curTime;
-      return; /* And nothing else this time */
+      // return; /* And nothing else this time */
     }
   }
-
-  rowPWMCount += 1;
-
-  /* Disable previously lit row */
-  palClearLine(ledRows[rowProcession[currentProcession]]);
-
-  currentProcession += 1;
-  if (currentProcession == 15) {
-      currentProcession = 0;
-  }
-
-  const uint16_t row = rowProcession[currentProcession];
-
-  //currentRow = (currentRow + 1) % NUM_ROWS;
-
-  /* Experiment */
-  // palClearLine(ledColumns[0]);
-  /* Constantly lit top-left key */
-
-  /* TODO Control PWM-wise all of those */
-  for (size_t col = 0; col < NUM_COLUMN; col++) {
-      const size_t ledIndex = col + (NUM_COLUMN * (row / 4));
-
-      const led_t keyLED = ledColors[ledIndex];
-      uint16_t cl;
-      if (row % 4 == 0) {
-          cl = keyLED.red;
-      } else if (row % 4 == 1) {
-          cl = keyLED.green;
-      } else {
-          cl = keyLED.blue;
-      }
-      if (cl < 20)
-          cl = 0;
-      sPWM(cl, rowPWMCount, ledColumns[col]);
-  }
-
-  /* Set current LED row */
-  palSetLine(ledRows[row]);
-
-  // if (rowPWMCount == 128)
-  // rowPWMCount = 0;
-
 }
 
 /*
