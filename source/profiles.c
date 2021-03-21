@@ -22,18 +22,37 @@ void blue(led_t *currentKeyLedColors) {
   setAllKeysColor(currentKeyLedColors, 0x0000FF);
 }
 
-void yellow(led_t *currentKeyLedColors) {
-  for (uint16_t i = 0; i < NUM_COLUMN * NUM_ROW; ++i) {
-    switch (i % 3) {
-    case 0:
-      currentKeyLedColors[i].rgb = 0x0000FF;
-      break;
-    case 1:
-      currentKeyLedColors[i].rgb = 0x00FF00;
-      break;
-    case 2:
-      currentKeyLedColors[i].rgb = 0xFF0000;
-      break;
+/* Color bleed test pattern */
+void colorBleed(led_t *currentKeyLedColors) {
+  for (uint16_t c = 0; c < NUM_COLUMN; ++c) {
+    for (uint16_t r = 0; r < NUM_ROW; ++r) {
+      const uint16_t i = c + NUM_COLUMN * r;
+      if (c == 0) {
+        if (r <= 3)
+          currentKeyLedColors[i].rgb = 0x0000FF;
+        else
+          currentKeyLedColors[i].rgb = 0xFF0000;
+        continue;
+      }
+      if (r == 0) {
+        if (c <= 10)
+          currentKeyLedColors[i].rgb = 0x0000FF;
+        else
+          currentKeyLedColors[i].rgb = 0xFF0000;
+        continue;
+      }
+
+      switch (i % 3) {
+      case 0:
+        currentKeyLedColors[i].rgb = 0x0000FF;
+        break;
+      case 1:
+        currentKeyLedColors[i].rgb = 0x00FF00;
+        break;
+      case 2:
+        currentKeyLedColors[i].rgb = 0xFF0000;
+        break;
+      }
     }
   }
 }
