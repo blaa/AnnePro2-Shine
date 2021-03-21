@@ -157,24 +157,17 @@ static uint32_t animationLastCallTime = 0;
    30kHz, all colors enabled, showing full RED
    PA11 (ROW1_R): 24µs high / 501µs cycle -> 1/20
    501µs -> 2000Hz = 30000 / 3/5
+
+
+   Obins:
+   9.81ms cycle, 573µs high; 120µs distance between cols.
+   Dimmest setting has the same column cycle.
+
+   Row strobe, on lowest brightness: 38.7µs in 3 "signals"
+   On highest: 460µs, 32 strobes.
  */
 static const GPTConfig bftm0Config = {.frequency = 40000,
                                       .callback = mainCallback};
-
-/* TODO: Use .dot notation */
-/*
-static PWMConfig pwmConfig = {
-    1000000, // XkHz PWM clock frequency.
-    1000000, // Initial PWM period
-    NULL,    // Period callback.
-    {
-        {PWM_OUTPUT_DISABLED, NULL}, // CH1 mode and callback.
-        {PWM_OUTPUT_DISABLED, NULL}, // CH2 mode and callback.
-        {PWM_OUTPUT_DISABLED, NULL}, // CH3 mode and callback.
-        {PWM_OUTPUT_DISABLED, NULL}, // CH4 mode and callback.
-    },
-};
-*/
 
 static mutex_t mtx;
 
@@ -191,12 +184,7 @@ static uint32_t foregroundColor = 0;
 uint8_t ledMasks[KEY_COUNT];
 led_t ledColors[KEY_COUNT];
 
-static uint16_t currentProcession = 0;
-const uint16_t rowProcession[] = {
-    0, 4,  8, 12, 16, /* Reds */
-    1, 5,  9, 13, 17, /* Greens */
-    2, 6, 10, 14, 18, /* Blues */
-};
+static uint8_t currentColumn = 0;
 
 static const SerialConfig usart1Config = {.speed = 115200};
 
@@ -529,7 +517,6 @@ static inline void sPWM(uint8_t cycle, uint8_t currentCount, ioline_t port) {
 }
 
 uint8_t rowPWMCount = 0;
-static uint8_t pwmValues[NUM_COLUMN];
 
 // mainCallback is responsible for 2 things:
 // * software PWM
@@ -543,35 +530,30 @@ void mainCallback(GPTDriver *_driver) {
 
   /* Prepare PWM data */
   rowPWMCount = (rowPWMCount + 1) % 128;
-  // rowPWMCount = 0;
 
-  const uint8_t prevRow = rowProcession[currentProcession];
+  const uint8_t prevColumn = currentColumn;
 
-  currentProcession++;
-  if (currentProcession == 15) { /* % generated a more expensive code */
-    currentProcession = 0;
-  }
-  const uint8_t currentRow = rowProcession[currentProcession];
-  const uint8_t ledIndexBase = NUM_COLUMN * (currentRow / 4);
-  const uint8_t currentColor = 2 - (currentRow % 4);
-
-  for (size_t col = 0; col < NUM_COLUMN; col++) {
-    const uint8_t cl = ledColors[ledIndexBase + col].pv[currentColor];
-    /* +1 to decrease color resolution from 0-255 to 0-127 */
-    pwmValues[col] = cl >> (1 + ledIntensity);
+  currentColumn++;
+  if (currentColumn == NUM_COLUMN) { /* % generated a more expensive code */
+      currentColumn = 0;
   }
 
   /* With prepared data, disable the previously lit row, configure the new one
      and lit it on immediately. */
-  palClearLine(ledRows[prevRow]);
+  palClearLine(ledColumns[prevColumn]);
 
-  for (size_t col = 0; col < NUM_COLUMN; col++) {
-  // for (int col = NUM_COLUMN-1; col >=0; col--) {
-      sPWM(pwmValues[col], rowPWMCount, ledColumns[col]);
+  for (size_t row = 0; row < NUM_ROW; row++) {
+      const uint8_t ledIndex = currentColumn + NUM_COLUMN * row;
+      const led_t cl = ledColors[ledIndex];
+
+      /* +1 to decrease color resolution from 0-255 to 0-127 */
+      sPWM(cl.p.red >> (1 + ledIntensity), rowPWMCount, ledRows[row*4 + 0]);
+      sPWM(cl.p.green >> (1 + ledIntensity), rowPWMCount, ledRows[row*4 + 1]);
+      sPWM(cl.p.blue >> (1 + ledIntensity), rowPWMCount, ledRows[row*4 + 2]);
   }
 
   /* Set current LED row */
-  palSetLine(ledRows[currentRow]);
+  palSetLine(ledColumns[currentColumn]);
 
   /* This time handle profile callback and nothing else */
   if (needToCallbackProfile) {
