@@ -46,32 +46,17 @@ ioline_t ledColumns[NUM_COLUMN] = {
     LINE_LED_COL_9,  LINE_LED_COL_10, LINE_LED_COL_11, LINE_LED_COL_12,
     LINE_LED_COL_13, LINE_LED_COL_14};
 
-ioline_t ledRows[NUM_ROW * 4] = {
+ioline_t ledRows[NUM_ROW * 3] = {
     /* 0 */
-    LINE_LED_ROW_1_R,
-    LINE_LED_ROW_1_G,
-    LINE_LED_ROW_1_B,
-    0,
-    /* 4 */
-    LINE_LED_ROW_2_R,
-    LINE_LED_ROW_2_G,
-    LINE_LED_ROW_2_B,
-    0,
-    /* 8 */
-    LINE_LED_ROW_3_R,
-    LINE_LED_ROW_3_G,
-    LINE_LED_ROW_3_B,
-    0,
-    /* 12 */
-    LINE_LED_ROW_4_R,
-    LINE_LED_ROW_4_G,
-    LINE_LED_ROW_4_B,
-    0,
-    /* 16 */
-    LINE_LED_ROW_5_R,
-    LINE_LED_ROW_5_G,
-    LINE_LED_ROW_5_B,
-    0,
+    LINE_LED_ROW_1_R, LINE_LED_ROW_1_G, LINE_LED_ROW_1_B,
+
+    LINE_LED_ROW_2_R, LINE_LED_ROW_2_G, LINE_LED_ROW_2_B,
+
+    LINE_LED_ROW_3_R, LINE_LED_ROW_3_G, LINE_LED_ROW_3_B,
+
+    LINE_LED_ROW_4_R, LINE_LED_ROW_4_G, LINE_LED_ROW_4_B,
+
+    LINE_LED_ROW_5_R, LINE_LED_ROW_5_G, LINE_LED_ROW_5_B,
 };
 
 #define KEY_COUNT 70
@@ -166,7 +151,7 @@ static uint32_t animationLastCallTime = 0;
    Row strobe, on lowest brightness: 38.7µs in 3 "signals"
    On highest: 460µs, 32 strobes.
  */
-static const GPTConfig bftm0Config = {.frequency = 40000,
+static const GPTConfig bftm0Config = {.frequency = 80000,
                                       .callback = mainCallback};
 
 static mutex_t mtx;
@@ -298,7 +283,7 @@ void changeMask(uint8_t mask) {
 }
 
 void nextIntensity() {
-  ledIntensity = (ledIntensity + 1) % 4;
+  ledIntensity = (ledIntensity + 1) % 8;
 
   // pwmEnableChannel(&PWMD_MCTM0, 0, PWM_PERCENTAGE_TO_WIDTH(&PWMD_MCTM0,
   // prcnt)); pwmChangePeriod(&PWMD_MCTM0, PWM_PERCENTAGE_TO_WIDTH(&PWMD_MCTM0,
@@ -417,13 +402,10 @@ static inline void disableLeds() {
     gptStop(&GPTD_BFTM0);
   }
 
-  // pwmStop(&PWMD_MCTM0);
   palClearLine(LINE_LED_PWR); /* Does it work with AF enabled? */
 
-  for (int i = 0; i < NUM_ROW * 4; i++) {
-    if (i % 4 != 3) {
-      palClearLine(ledRows[i]);
-    }
+  for (int ledRow = 0; ledRow < NUM_ROW * 3; ledRow++) {
+    palClearLine(ledRows[ledRow]);
   }
   for (int i = 0; i < NUM_COLUMN; i++) {
     palClearLine(ledColumns[i]);
@@ -442,10 +424,6 @@ static inline void enableLeds(void) {
   executeProfile(true);
 
   palSetLine(LINE_LED_PWR);
-
-  // pwmStart(&PWMD_MCTM0, &pwmConfig);
-  // pwmEnableChannel(&PWMD_MCTM0, 1, PWM_PERCENTAGE_TO_WIDTH(&PWMD_MCTM0,
-  // 10000));
 
   // start PWM handling interval
   gptStart(&GPTD_BFTM0, &bftm0Config);
@@ -478,7 +456,7 @@ void ledSetRow() {
       sdReadTimeout(&SD1, commandBuffer, sizeof(led_t) * NUM_COLUMN + 1, 1000);
   if (bytesRead >= sizeof(led_t) * NUM_COLUMN + 1) {
     if (commandBuffer[0] < NUM_ROW) {
-        /* FIXME: Don't use direct access */
+      /* FIXME: Don't use direct access */
       memcpy(&ledColors[commandBuffer[0] * NUM_COLUMN], &commandBuffer[1],
              sizeof(led_t) * NUM_COLUMN);
     }
@@ -499,24 +477,9 @@ static inline void animationCallback() {
   profiles[currentProfile].callback(ledColors);
 }
 
-/*
- * Enables a row IO line according to the PWM cycle. PWM controls the brightness
- * of all LEDs individually.
- */
-static inline void sPWM(uint8_t cycle, uint8_t currentCount, ioline_t port) {
-  /* Cycle is a color intensity 0-127. the higher - the brighter currentCount is
-   * current PWM cycle position.
-   * 0 is always disabled, 127 is always enabled
-   */
-  if (cycle > 5 && cycle >= currentCount) {
-    /* Enable LED */
-    palSetLine(port);
-  } else {
-    palClearLine(port);
-  }
-}
-
-uint8_t rowPWMCount = 0;
+/* Row1 R-G-B, Row2 R-G-B, Row3 R-G-B, ... */
+uint8_t rowTimes[NUM_ROW * 3];
+uint32_t pwmCounter;
 
 // mainCallback is responsible for 2 things:
 // * software PWM
@@ -528,38 +491,10 @@ void mainCallback(GPTDriver *_driver) {
   if (!ledEnabled)
     return;
 
-  /* Prepare PWM data */
-  rowPWMCount = (rowPWMCount + 1) % 128;
-
-  const uint8_t prevColumn = currentColumn;
-
-  currentColumn++;
-  if (currentColumn == NUM_COLUMN) { /* % generated a more expensive code */
-      currentColumn = 0;
-  }
-
-  /* With prepared data, disable the previously lit row, configure the new one
-     and lit it on immediately. */
-  palClearLine(ledColumns[prevColumn]);
-
-  for (size_t row = 0; row < NUM_ROW; row++) {
-      const uint8_t ledIndex = currentColumn + NUM_COLUMN * row;
-      const led_t cl = ledColors[ledIndex];
-
-      /* +1 to decrease color resolution from 0-255 to 0-127 */
-      sPWM(cl.p.red >> (1 + ledIntensity), rowPWMCount, ledRows[row*4 + 0]);
-      sPWM(cl.p.green >> (1 + ledIntensity), rowPWMCount, ledRows[row*4 + 1]);
-      sPWM(cl.p.blue >> (1 + ledIntensity), rowPWMCount, ledRows[row*4 + 2]);
-  }
-
-  /* Set current LED row */
-  palSetLine(ledColumns[currentColumn]);
-
-  /* This time handle profile callback and nothing else */
+  /* This time handle profile callback */
   if (needToCallbackProfile) {
     needToCallbackProfile = false;
     profiles[currentProfile].callback(ledColors);
-    return;
   }
 
   if (animationSkipTicks > 0) {
@@ -572,6 +507,65 @@ void mainCallback(GPTDriver *_driver) {
       animationLastCallTime = curTime;
     }
   }
+
+  pwmCounter += 1;
+  /*
+   * pwmCounter goes over 64 a bit to limit the current of completely white
+   * board (0.5A vs <0.3A for original firmware.
+   *
+   */
+  if (pwmCounter < 80) {
+    /* Disable some enabled rows only */
+
+    for (size_t ledRow = 0; ledRow < NUM_ROW * 3; ledRow++) {
+      const uint8_t time = rowTimes[ledRow];
+      if (time) {
+        rowTimes[ledRow]--;
+        /* Time's up. Disable row */
+        if (time == 1)
+          palClearLine(ledRows[ledRow]);
+      }
+    }
+    return;
+  }
+  pwmCounter = 0;
+
+  const uint8_t prevColumn = currentColumn;
+
+  currentColumn++;
+  if (currentColumn ==
+      NUM_COLUMN) { /* TODO CHECK % generated a more expensive code */
+    currentColumn = 0;
+  }
+
+  /* Prepare the PWM data while still lighting the previous column */
+  const uint8_t intensityDecrease = ledIntensity * 8;
+  for (size_t keyRow = 0; keyRow < NUM_ROW; keyRow++) {
+    const uint8_t ledIndex = currentColumn + NUM_COLUMN * keyRow;
+    const led_t cl = ledColors[ledIndex];
+
+    for (size_t colorIdx = 0; colorIdx < 3; colorIdx++) {
+      /* +1 to decrease color resolution from 0-255 to 0-63 FIXME */
+      uint8_t color = cl.pv[2 - colorIdx] >> 2;
+      if (intensityDecrease > color)
+        color = 0;
+      else
+        color -= intensityDecrease;
+      rowTimes[3 * keyRow + colorIdx] = color;
+    }
+  }
+
+  /* With prepared data, disable the previously lit row, configure the new one
+     and lit it on immediately. */
+  palClearLine(ledColumns[prevColumn]);
+  for (size_t ledRow = 0; ledRow < NUM_ROW * 3; ledRow++) {
+    if (rowTimes[ledRow]) {
+      /* Light it up at least a bit */
+      palSetLine(ledRows[ledRow]);
+    }
+  }
+  /* Set current LED row */
+  palSetLine(ledColumns[currentColumn]);
 }
 
 /*

@@ -24,24 +24,24 @@ void blue(led_t *currentKeyLedColors) {
 
 void yellow(led_t *currentKeyLedColors) {
   for (uint16_t i = 0; i < NUM_COLUMN * NUM_ROW; ++i) {
-      switch (i % 3) {
-      case 0:
-          currentKeyLedColors[i].rgb = 0x0000FF;
-          break;
-      case 1:
-          currentKeyLedColors[i].rgb = 0x00FF00;
-          break;
-      case 2:
-          currentKeyLedColors[i].rgb = 0xFF0000;
-          break;
-      }
+    switch (i % 3) {
+    case 0:
+      currentKeyLedColors[i].rgb = 0x0000FF;
+      break;
+    case 1:
+      currentKeyLedColors[i].rgb = 0x00FF00;
+      break;
+    case 2:
+      currentKeyLedColors[i].rgb = 0xFF0000;
+      break;
+    }
   }
 }
 
 void white(led_t *currentKeyLedColors) {
   /* Compensate for gateron/kailh reds on board */
   // setAllKeysColor(currentKeyLedColors, 0xAAFFFF);
-  //setAllKeysColor(currentKeyLedColors, 0x0A0b0c);
+  // setAllKeysColor(currentKeyLedColors, 0x0A0b0c);
   setAllKeysColor(currentKeyLedColors, 0xffffff);
 }
 

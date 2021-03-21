@@ -38,6 +38,4 @@ void setModKeysColor(led_t *ledColors, uint32_t color) {
 }
 
 // Set specific key color
-inline void setKeyColor(led_t *key, uint32_t color) {
-    key->rgb = color;
-}
+inline void setKeyColor(led_t *key, uint32_t color) { key->rgb = color; }
