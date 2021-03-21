@@ -134,7 +134,7 @@ profile profiles[] = {
      reactivePulseKeypress,
      reactivePulseInit}};
 
-static uint8_t currentProfile = 4;
+static uint8_t currentProfile = 0;
 // static uint8_t currentProfile = 8;
 static const uint8_t amountOfProfiles = sizeof(profiles) / sizeof(profile);
 static volatile uint8_t currentSpeed = 0;
@@ -151,6 +151,12 @@ static uint32_t animationLastCallTime = 0;
    This revisits each key 1/5 of a time - 8kHz.
 
    1/40kHz * 1000ms = 0.025ms
+
+
+   oscilloscope:
+   30kHz, all colors enabled, showing full RED
+   PA11 (ROW1_R): 24µs high / 501µs cycle -> 1/20
+   501µs -> 2000Hz = 30000 / 3/5
  */
 static const GPTConfig bftm0Config = {.frequency = 40000,
                                       .callback = mainCallback};
@@ -184,23 +190,13 @@ static uint32_t foregroundColor = 0;
 
 uint8_t ledMasks[KEY_COUNT];
 led_t ledColors[KEY_COUNT];
-// static uint16_t currentRow = 0;
 
 static uint16_t currentProcession = 0;
 const uint16_t rowProcession[] = {
- 0, 4, 8, 12, 16, /* Reds */
- 1, 5, 9, 13, 17, /* Greens */
- 2, 6,10, 14, 18, /* Blues */
+    0, 4,  8, 12, 16, /* Reds */
+    1, 5,  9, 13, 17, /* Greens */
+    2, 6, 10, 14, 18, /* Blues */
 };
-
-/*
-const ioline_t rowProcession[15] = {
-    LINE_LED_ROW_1_R, LINE_LED_ROW_2_R, LINE_LED_ROW_3_R, LINE_LED_ROW_4_R,
-    LINE_LED_ROW_5_R, LINE_LED_ROW_1_G, LINE_LED_ROW_2_G, LINE_LED_ROW_3_G,
-    LINE_LED_ROW_4_G, LINE_LED_ROW_5_G, LINE_LED_ROW_1_B, LINE_LED_ROW_2_B,
-    LINE_LED_ROW_3_B, LINE_LED_ROW_4_B, LINE_LED_ROW_5_B,
-};
-*/
 
 static const SerialConfig usart1Config = {.speed = 115200};
 
@@ -433,7 +429,6 @@ static inline void disableLeds() {
     gptStop(&GPTD_BFTM0);
   }
 
-  // palSetLine(LINE_LED_PWR);
   // pwmStop(&PWMD_MCTM0);
   palClearLine(LINE_LED_PWR); /* Does it work with AF enabled? */
 
@@ -495,6 +490,7 @@ void ledSetRow() {
       sdReadTimeout(&SD1, commandBuffer, sizeof(led_t) * NUM_COLUMN + 1, 1000);
   if (bytesRead >= sizeof(led_t) * NUM_COLUMN + 1) {
     if (commandBuffer[0] < NUM_ROW) {
+        /* FIXME: Don't use direct access */
       memcpy(&ledColors[commandBuffer[0] * NUM_COLUMN], &commandBuffer[1],
              sizeof(led_t) * NUM_COLUMN);
     }
@@ -507,13 +503,11 @@ inline uint8_t min(uint8_t a, uint8_t b) { return a <= b ? a : b; }
  * Update lighting table as per animation
  */
 static inline void animationCallback() {
-
   // If the foreground is set we skip the animation as a way to avoid it
   // overrides the foreground
   if (foregroundColorSet) {
     return;
   }
-
   profiles[currentProfile].callback(ledColors);
 }
 
@@ -522,10 +516,11 @@ static inline void animationCallback() {
  * of all LEDs individually.
  */
 static inline void sPWM(uint8_t cycle, uint8_t currentCount, ioline_t port) {
-  /* Cycle is a color intensity 0-255. the higher - the brighter
-   * currentCount is current PWM cycle position.
+  /* Cycle is a color intensity 0-127. the higher - the brighter currentCount is
+   * current PWM cycle position.
+   * 0 is always disabled, 127 is always enabled
    */
-  if (cycle > currentCount) {
+  if (cycle > 5 && cycle >= currentCount) {
     /* Enable LED */
     palSetLine(port);
   } else {
@@ -534,6 +529,7 @@ static inline void sPWM(uint8_t cycle, uint8_t currentCount, ioline_t port) {
 }
 
 uint8_t rowPWMCount = 0;
+static uint8_t pwmValues[NUM_COLUMN];
 
 // mainCallback is responsible for 2 things:
 // * software PWM
@@ -547,41 +543,31 @@ void mainCallback(GPTDriver *_driver) {
 
   /* Prepare PWM data */
   rowPWMCount = (rowPWMCount + 1) % 128;
-
+  // rowPWMCount = 0;
 
   const uint8_t prevRow = rowProcession[currentProcession];
-  currentProcession += 1;
-  if (currentProcession == 15) { /* % generated more expensive code */
+
+  currentProcession++;
+  if (currentProcession == 15) { /* % generated a more expensive code */
     currentProcession = 0;
   }
   const uint8_t currentRow = rowProcession[currentProcession];
   const uint8_t ledIndexBase = NUM_COLUMN * (currentRow / 4);
-  const uint8_t currentColor= 1 + (currentRow % 4); /* FIXME */
+  const uint8_t currentColor = 2 - (currentRow % 4);
 
-  uint8_t vals[NUM_COLUMN];
   for (size_t col = 0; col < NUM_COLUMN; col++) {
-    const led_t keyLED = ledColors[ledIndexBase + col];
-    uint8_t cl;
-    cl = keyLED.pv[currentColor];
-    /*
-    if (currentRow % 4 == 0) {
-      cl = keyLED.red;
-    } else if (currentRow % 4 == 1) {
-      cl = keyLED.green;
-    } else {
-      cl = keyLED.blue;
-    }
-    */
-    cl >>= ledIntensity; /* Dim */
-    vals[col] = cl >> 1; /* Decrease color resolution */
+    const uint8_t cl = ledColors[ledIndexBase + col].pv[currentColor];
+    /* +1 to decrease color resolution from 0-255 to 0-127 */
+    pwmValues[col] = cl >> (1 + ledIntensity);
   }
 
   /* With prepared data, disable the previously lit row, configure the new one
-   and lit it on immediately. */
+     and lit it on immediately. */
   palClearLine(ledRows[prevRow]);
 
   for (size_t col = 0; col < NUM_COLUMN; col++) {
-    sPWM(vals[col], rowPWMCount, ledColumns[col]);
+  // for (int col = NUM_COLUMN-1; col >=0; col--) {
+      sPWM(pwmValues[col], rowPWMCount, ledColumns[col]);
   }
 
   /* Set current LED row */
@@ -602,7 +588,6 @@ void mainCallback(GPTDriver *_driver) {
         curTime - animationLastCallTime >= animationSkipTicks) {
       animationCallback();
       animationLastCallTime = curTime;
-      // return; /* And nothing else this time */
     }
   }
 }
