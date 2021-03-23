@@ -142,8 +142,7 @@ static uint16_t animationTicks = 0;
 
    Tests on oscilloscope suggest it can reach 100kHz.
  */
-static const GPTConfig bftm0Config = {.frequency = 80000,
-                                      .callback = mainCallback};
+static GPTConfig bftm0Config = {.frequency = 80000, .callback = mainCallback};
 
 static mutex_t mtx;
 
@@ -483,7 +482,7 @@ uint16_t pwmCounter;
  * You can get brighter LEDs if you set this to 64. And possibly burn the
  * board in the longer period of time.
  */
-const uint16_t pwmCounterLimit = 80;
+const uint16_t pwmCounterLimit = 64;
 
 /* Disable timeouted LEDs */
 static inline void pwmRowDimmer() {
@@ -494,17 +493,11 @@ static inline void pwmRowDimmer() {
       rowsEnabled--;
     }
   }
-  if (rowsEnabled == 0) {
-    /* Limit color bleed by disabling the column as early as possible */
-    palClearLine(ledColumns[currentColumn]);
-  }
 }
 
 /* Start new PWM cycle */
 static inline void pwmNextColumn() {
-  /* Disable previously lit column */
-  palClearLine(ledColumns[currentColumn]);
-
+  uint8_t prevCol = currentColumn;
   currentColumn = (currentColumn + 1) % NUM_COLUMN;
 
   /* TODO: Minimum intensity per animation? For some, the darkness doesn't work
@@ -532,6 +525,8 @@ static inline void pwmNextColumn() {
       rowTimes[ledRow] = color;
     }
   }
+  /* Disable previously lit column */
+  palClearLine(ledColumns[prevCol]);
 
   /* Enable the current LED column if at least one row needs this. Limit bleed
      and maybe power consumption on reactive profiles. */
