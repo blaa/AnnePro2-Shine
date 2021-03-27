@@ -21,6 +21,7 @@ void animatedRainbowWaterfall(led_t *currentKeyLedColors);
 void animatedBreathing(led_t *currentKeyLedColors);
 void animatedSpectrum(led_t *currentKeyLedColors);
 void animatedWave(led_t *currentKeyLedColors);
+void animatedHeartbeat(led_t *currentKeyLedColors);
 
 /*
  * ANIMATED - responding to key presses
@@ -32,3 +33,7 @@ void reactiveFadeInit(led_t *ledColors);
 void reactivePulse(led_t *ledColors);
 void reactivePulseKeypress(led_t *ledColors, uint8_t row, uint8_t col);
 void reactivePulseInit(led_t *ledColors);
+
+void reactiveTerm(led_t *ledColors);
+void reactiveTermKeypress(led_t *ledColors, uint8_t row, uint8_t col);
+void reactiveTermInit(led_t *ledColors);
