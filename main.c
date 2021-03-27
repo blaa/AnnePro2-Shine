@@ -594,6 +594,11 @@ int main(void) {
   halInit();
   chSysInit();
 
+  sdStart(&SD1, &usart1Config);
+  // loop to clear out receive buffer from the wakeup
+  while (!sdGetWouldBlock(&SD1))
+    sdGet(&SD1);
+
   updateAnimationSpeed();
 
   // Setup masks to all be 0xFF at the start
@@ -601,10 +606,18 @@ int main(void) {
 
   chMtxObjectInit(&mtx);
 
+  /* Initialize all LED lines as disabled - just in case */
+  for (int ledRow = 0; ledRow < NUM_ROW * 3; ledRow++) {
+    palClearLine(ledRows[ledRow]);
+  }
+  for (int i = 0; i < NUM_COLUMN; i++) {
+    palClearLine(ledColumns[i]);
+  }
   palClearLine(LINE_LED_PWR);
-  sdStart(&SD1, &usart1Config);
 
   chThdSetPriority(HIGHPRIO);
+
+  chThdSleepMilliseconds(10);
 
   // start the handler for commands coming from the main MCU
   while (true) {

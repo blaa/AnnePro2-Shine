@@ -60,6 +60,7 @@ void colorBleed(led_t *currentKeyLedColors) {
 void white(led_t *currentKeyLedColors) {
   /* To get "white" you need to compensate for red/blue switches on board */
   setAllKeysColor(currentKeyLedColors, 0x80ff99);
+  /* 80ff99 -> H 131.8 S 49.8 V 100 */
 }
 
 void miamiNights(led_t *currentKeyLedColors) {
@@ -231,5 +232,6 @@ void reactivePulseInit(led_t *ledColors) {
   for (int i = 0; i < NUM_ROW; i++) {
     pulseBuf[i] = 80 + i * 5;
   }
-  memset(ledColors, 0, NUM_ROW * NUM_COLUMN * 3);
+  memset(ledColors, 0, NUM_ROW * NUM_COLUMN * sizeof(*ledColors));
 }
+

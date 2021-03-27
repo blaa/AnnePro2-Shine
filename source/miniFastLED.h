@@ -36,6 +36,12 @@ CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE SOFTWARE.
 #include "light_utils.h"
 
 /*
+    Constants
+*/
+#define HUE_RED 0
+
+
+/*
     Function Signatures
 */
 void hsv2rgb(uint8_t hue, uint8_t sat, uint8_t val, led_t *rgbResults);
